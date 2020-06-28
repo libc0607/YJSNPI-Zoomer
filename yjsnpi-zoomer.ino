@@ -23,11 +23,11 @@
 #define PIN_UART_RX         PA10  // as gpio
 // ======================================
 
-// PWM1: Motor AB: 750us~1250us CW, 1250us~1750us Brake, 1750us~2250us CCW
-// PWM2: Motor CD: 750us~1250us CW, 1250us~1750us Brake, 1750us~2250us CCW
-// PWM3: 750us~1250us IRCUT Off + LED Off
-//       1250us~1750us IRCUT On  + LED Off
-//       1750us~2250us IRCUT On  + LED On
+// PWM1: Motor AB: 750us~1200us CW, 1250us~1750us Brake, 1800us~2250us CCW
+// PWM2: Motor CD: 750us~1200us CW, 1250us~1750us Brake, 1800us~2250us CCW
+// PWM3: 750us~1150us  IRCUT Off + LED Off
+//       1350us~1650us IRCUT On  + LED Off
+//       1850us~2250us IRCUT On  + LED On
 // 20ms period:
 // ----DT1----DT2----rotate----
 // ----1ms----
@@ -36,8 +36,9 @@
 
 unsigned long pwm_ts[3] = {0};
 unsigned long pwm_val_us[3] = {1500, 1500, 1000};
-int ircut_working = true;
+int ircut_working = false;  // 0-idle, 12345..-working
 int timer_flag = false;
+int ircut_status = 1; // 0-off, 1-on
 
 void pwm1_isr() {
   if (digitalRead(PIN_PWMIN_1) == HIGH) {
@@ -139,17 +140,30 @@ void ms41929_ircut_change(int state) {
 
 void ircut_update() {
   if (ircut_working) {
-    ms41929_ircut_change(0);
-    ircut_working = false;
+    ircut_working++;
+    if (ircut_working > 5) {
+      ms41929_ircut_change(0);
+      ircut_working = false;
+    }
   } else {
-    if (pwm_val_us[2] < 1250 && pwm_val_us[2] > 750) {
-      // state 1
-      ms41929_ircut_change(1);
-      ircut_working = true;
-    } else if (pwm_val_us[2] > 1250 && pwm_val_us[2] < 2250) {
-      // on
-      ms41929_ircut_change(2);
-      ircut_working = true;
+    if (pwm_val_us[2] < 1150 && pwm_val_us[2] > 750) {
+      if (ircut_status == 0) {
+        // have not changed, ignore
+      } else {
+        // changed
+        ms41929_ircut_change(1);
+        ircut_working = true;
+        ircut_status = 0;
+      }
+    } else if (pwm_val_us[2] > 1350 && pwm_val_us[2] < 2250) {
+      if (ircut_status == 1) {
+        // have not changed, ignore
+      } else {
+        ms41929_ircut_change(2);
+        ircut_working = true;
+        ircut_status = 1;
+      }
+      
     }
   }
 }
@@ -188,25 +202,25 @@ void ms41929_init() {
 void motor_update() {
   ms41929_vdfz();
   // AB
-  if (pwm_val_us[0] > 750 && pwm_val_us[0] < 1250) {
+  if (pwm_val_us[0] > 750 && pwm_val_us[0] < 1200) {
     ms41929_write(0x24, (0<<12) | (1<<10) | (0<<9) | (0<<8) | 0x3f );  
                       // MICROAB, ENDISAB, BRAKEAB, CCWCWAB, PSUMAB
   } else if (pwm_val_us[0] > 1250 && pwm_val_us[0] < 1750) {
     ms41929_write(0x24, (0<<12) | (1<<10) | (1<<9) | (0<<8) | 0x0 );  
                       // MICROAB, ENDISAB, BRAKEAB, CCWCWAB, PSUMAB
-  } else if (pwm_val_us[0] > 1750 && pwm_val_us[0] < 2250) {
+  } else if (pwm_val_us[0] > 1800 && pwm_val_us[0] < 2250) {
     ms41929_write(0x24, (0<<12) | (1<<10) | (0<<9) | (1<<8) | 0x3f );  
                       // MICROAB, ENDISAB, BRAKEAB, CCWCWAB, PSUMAB
   }
 
   // CD
-  if (pwm_val_us[1] > 750 && pwm_val_us[1] < 1250) {
+  if (pwm_val_us[1] > 750 && pwm_val_us[1] < 1200) {
     ms41929_write(0x29, (0x0<<12) | (0x1<<10) | (0x0<<9) | (0x0<<8) | 0x3f );  
                       // MICROCD, ENDISCD, BRAKECD, CCWCWCD, PSUMCD
   } else if (pwm_val_us[1] > 1250 && pwm_val_us[1] < 1750) {
     ms41929_write(0x29, (0x0<<12) | (0x1<<10) | (0x1<<9) | (0x0<<8) | 0x0 );  
                       // MICROCD, ENDISCD, BRAKECD, CCWCWCD, PSUMCD
-  } else if (pwm_val_us[1] > 1750 && pwm_val_us[1] < 2250) {
+  } else if (pwm_val_us[1] > 1800 && pwm_val_us[1] < 2250) {
     ms41929_write(0x29, (0x0<<12) | (0x1<<10) | (0x0<<9) | (0x1<<8) | 0x3f );  
                       // MICROCD, ENDISCD, BRAKECD, CCWCWCD, PSUMCD
   }
@@ -257,6 +271,7 @@ void startup_blink() {
   ms41929_led_change(1, LOW);
   ms41929_led_change(2, LOW);
   ms41929_ircut_change(2);
+  ircut_status = 1;
   delay(100);
   ms41929_led_change(1, HIGH);
   ms41929_led_change(2, HIGH);
