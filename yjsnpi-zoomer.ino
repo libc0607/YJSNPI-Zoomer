@@ -112,10 +112,10 @@ void ms41929_led_change(int channel, int value) {
 }
 
 void led_update() {
-  if (pwm_val_us[2] < 1750 && pwm_val_us[2] > 750) {
+  if (pwm_val_us[2] < 1650 && pwm_val_us[2] > 750) {
       ms41929_led_change(1, HIGH);
       ms41929_led_change(2, HIGH);
-    } else if (pwm_val_us[2] > 1750 && pwm_val_us[2] < 2250) {
+    } else if (pwm_val_us[2] > 1850 && pwm_val_us[2] < 2250) {
       ms41929_led_change(1, LOW);
       ms41929_led_change(2, LOW);
     }
