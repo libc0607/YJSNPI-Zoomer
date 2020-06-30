@@ -5,6 +5,12 @@
 //  https://github.com/libc0607/YJSNPI-Zoomer
 // ======================================
 
+// Note: change MS41929_PPS and MS41929_CURRENT_RATIO if needed
+// large pps causes low torque, small pps causes slow zooming
+// generally this number should be less than 800
+#define MS41929_PPS 600
+#define MS41929_CURRENT_RATIO (8/4)
+
 #include <SPI.h>
 
 // ==== Pin definition ==================
@@ -23,17 +29,19 @@
 #define PIN_UART_RX         PA10  // as gpio
 // ======================================
 
+#define MS41929_VD_FREQ 50          // Hz
+#define MS41929_OSC_FREQ 27000000   // Hz
+#define MS41929_PSUMXX (  ( (4)*(MS41929_PPS) ) / (MS41929_VD_FREQ) )
+#define MS41929_INTCTXX (   (MS41929_OSC_FREQ)   /   ( (24) * (MS41929_VD_FREQ) * (MS41929_PSUMXX) )    )
+#define MS41929_PWMMODE (8)
+#define MS41929_PPWX ( (8) * (MS41929_PWMMODE) * (MS41929_CURRENT_RATIO) )
+
+
 // PWM1: Motor AB: 750us~1200us CW, 1250us~1750us Brake, 1800us~2250us CCW
 // PWM2: Motor CD: 750us~1200us CW, 1250us~1750us Brake, 1800us~2250us CCW
 // PWM3: 750us~1150us  IRCUT Off + LED Off
 //       1350us~1650us IRCUT On  + LED Off
 //       1850us~2250us IRCUT On  + LED On
-// 20ms period:
-// ----DT1----DT2----rotate----
-// ----1ms----
-// 800pps, VD=50hz, OSC=27MHz
-// PSUMxx=63=0x3f, INTCTxx=357=0x165
-
 unsigned long pwm_ts[3] = {0};
 unsigned long pwm_val_us[3] = {1500, 1500, 1000};
 int ircut_working = false;  // 0-idle, 12345..-working
@@ -112,10 +120,10 @@ void ms41929_led_change(int channel, int value) {
 }
 
 void led_update() {
-  if (pwm_val_us[2] < 1650 && pwm_val_us[2] > 750) {
+  if (pwm_val_us[2] < 1700 && pwm_val_us[2] > 750) {
       ms41929_led_change(1, HIGH);
       ms41929_led_change(2, HIGH);
-    } else if (pwm_val_us[2] > 1850 && pwm_val_us[2] < 2250) {
+    } else if (pwm_val_us[2] > 1800 && pwm_val_us[2] < 2250) {
       ms41929_led_change(1, LOW);
       ms41929_led_change(2, LOW);
     }
@@ -186,13 +194,12 @@ void ms41929_init() {
   
   // register init
   ms41929_write(0x0B, 0x0000);  // 
-  ms41929_write(0x20, (1<<12) | (8<<7) | 2); 
-                    // PWMRES, PWMMODE, DT1
-                    //  ~105.5kHz, ~0.3ms
+  ms41929_write(0x20, (1<<12) | (MS41929_PWMMODE<<7) | 2); 
+                    // PWMRES,        PWMMODE,        DT1
   ms41929_write(0x22, 0x0001);  // DT2A ~0.3ms
   ms41929_write(0x27, 0x0001);  // DT2B ~0.3ms
-  ms41929_write(0x23, (0x40<<8) | 0x40);  // PPWA/PPWB
-  ms41929_write(0x28, (0x40<<8) | 0x40);  // PPWC/PPWD
+  ms41929_write(0x23, (MS41929_PPWX<<8) | MS41929_PPWX);  // PPWA/PPWB
+  ms41929_write(0x28, (MS41929_PPWX<<8) | MS41929_PPWX);  // PPWC/PPWD
   ms41929_write(0x24, (0<<12) | (0 << 11) | (1<<10) | (0<<9) | (0<<8) | (0) );  
                     // MICROAB,   LEDA,     ENDISAB, BRAKEAB, CCWCWAB, PSUMAB
   ms41929_write(0x29, (0<<12) | (0 << 11) | (1<<10) | (0<<9) | (0<<8) | (0) );  
@@ -203,30 +210,30 @@ void motor_update() {
   ms41929_vdfz();
   // AB
   if (pwm_val_us[0] > 750 && pwm_val_us[0] < 1200) {
-    ms41929_write(0x24, (0<<12) | (1<<10) | (0<<9) | (0<<8) | 0x3f );  
+    ms41929_write(0x24, (0<<12) | (1<<10) | (0<<9) | (0<<8) | MS41929_PSUMXX );  
                       // MICROAB, ENDISAB, BRAKEAB, CCWCWAB, PSUMAB
   } else if (pwm_val_us[0] > 1250 && pwm_val_us[0] < 1750) {
     ms41929_write(0x24, (0<<12) | (1<<10) | (1<<9) | (0<<8) | 0x0 );  
                       // MICROAB, ENDISAB, BRAKEAB, CCWCWAB, PSUMAB
   } else if (pwm_val_us[0] > 1800 && pwm_val_us[0] < 2250) {
-    ms41929_write(0x24, (0<<12) | (1<<10) | (0<<9) | (1<<8) | 0x3f );  
+    ms41929_write(0x24, (0<<12) | (1<<10) | (0<<9) | (1<<8) | MS41929_PSUMXX );  
                       // MICROAB, ENDISAB, BRAKEAB, CCWCWAB, PSUMAB
   }
 
   // CD
   if (pwm_val_us[1] > 750 && pwm_val_us[1] < 1200) {
-    ms41929_write(0x29, (0x0<<12) | (0x1<<10) | (0x0<<9) | (0x0<<8) | 0x3f );  
+    ms41929_write(0x29, (0x0<<12) | (0x1<<10) | (0x0<<9) | (0x0<<8) | MS41929_PSUMXX );  
                       // MICROCD, ENDISCD, BRAKECD, CCWCWCD, PSUMCD
   } else if (pwm_val_us[1] > 1250 && pwm_val_us[1] < 1750) {
     ms41929_write(0x29, (0x0<<12) | (0x1<<10) | (0x1<<9) | (0x0<<8) | 0x0 );  
                       // MICROCD, ENDISCD, BRAKECD, CCWCWCD, PSUMCD
   } else if (pwm_val_us[1] > 1800 && pwm_val_us[1] < 2250) {
-    ms41929_write(0x29, (0x0<<12) | (0x1<<10) | (0x0<<9) | (0x1<<8) | 0x3f );  
+    ms41929_write(0x29, (0x0<<12) | (0x1<<10) | (0x0<<9) | (0x1<<8) | MS41929_PSUMXX );  
                       // MICROCD, ENDISCD, BRAKECD, CCWCWCD, PSUMCD
   }
   
-  ms41929_write(0x25, 0x165); // INTCTAB
-  ms41929_write(0x2A, 0x165); // INTCTCD
+  ms41929_write(0x25, MS41929_INTCTXX); // INTCTAB
+  ms41929_write(0x2A, MS41929_INTCTXX); // INTCTCD
   
 }
 
@@ -296,7 +303,7 @@ void setup() {
   startup_blink();
 
   HardwareTimer *main_timer = new HardwareTimer(TIM14);
-  main_timer->setOverflow(50, HERTZ_FORMAT);
+  main_timer->setOverflow(MS41929_VD_FREQ, HERTZ_FORMAT);
   main_timer->attachInterrupt(timer_isr_cb);
   main_timer->resume();
 }
