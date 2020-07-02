@@ -3,7 +3,9 @@
 ### 这是啥  
 基于 STM32F0 + MS41929 的监控用变焦镜头控制器  
 硬件设计在 [LCEDA 的这里](https://oshwhub.com/libc0607/step-motors-controller-for-ipc)  
-这个东西属于 [YJSNPI-Broadcast](https://github.com/libc0607/YJSNPI-Broadcast) 巨坑的一部分
+这个东西属于 [YJSNPI-Broadcast](https://github.com/libc0607/YJSNPI-Broadcast) 巨坑的一部分  
+![taobao](https://github.com/libc0607/YJSNPI-Zoomer/blob/master/len-taobao.png)
+![main](https://github.com/libc0607/YJSNPI-Zoomer/blob/master/len-pwm-in.png)
 
 ### 如何编译  
 以下在 Arduino 1.8.12 + STM32duino 1.9.0 下验证通过  
@@ -33,6 +35,7 @@
 
 
 ```
-
-
+以我用的镜头为例  
+![len-2mm8-12mm](https://github.com/libc0607/YJSNPI-Zoomer/blob/master/len_doc_2mm8-12mm.png)
+![motor](https://github.com/libc0607/YJSNPI-Zoomer/blob/master/stepper_doc.png)
 
